@@ -62,7 +62,7 @@
             <h2 id="auth-title" class="text-2xl font-bold text-slate-800 mb-2">지문을 인식해주세요</h2>
             <p id="auth-subtitle" class="text-slate-500 text-sm h-6 mb-4">센서에 등록된 손가락을 올려주세요.</p>
 
-            <!-- 웹 터미널 (기기 로그 표시) -->
+            <!-- 웹 터미널 -->
             <div class="bg-slate-900 rounded-xl p-4 text-left shadow-inner h-28 overflow-y-auto terminal-scroll mb-4">
                 <p class="text-xs font-bold text-slate-400 mb-2 flex items-center gap-1"><i data-lucide="terminal" class="w-3 h-3"></i> Pico 2 W 터미널</p>
                 <div id="device-terminal" class="text-green-400 font-mono text-sm space-y-1"></div>
@@ -104,12 +104,12 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>lucide.createIcons();</script>
 
-    <!-- 파이어베이스 SDK 연동 -->
+    <!-- Firestore 삭제! 오직 Realtime Database만 사용합니다 -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
-        import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // 💥 push 모듈을 추가하여 데이터를 덮어쓰지 않고 '누적'되게 합니다.
+        import { getDatabase, ref, onValue, set, push } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAm29muJaEax7QGT3NT91dHBrvFPG6VYOg",
@@ -125,7 +125,6 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const rtdb = getDatabase(app);
-        const db = getFirestore(app);
 
         let currentFingerId = null;
         let memoUnsubscribe = null;
@@ -134,16 +133,15 @@
         const views = { home: document.getElementById('view-home'), auth: document.getElementById('view-auth'), dashboard: document.getElementById('view-dashboard') };
         const deviceTerminal = document.getElementById('device-terminal');
 
-        // UI 뷰 전환 함수
         window.showView = function(viewName) {
             Object.values(views).forEach(v => v.classList.add('hidden'));
             views[viewName].classList.remove('hidden');
+            // 인증 화면에 들어오면 피코에게 대기하라는 명령(신호)을 덮어씀
             if (viewName === 'auth' && currentFingerId === null) {
                 set(ref(rtdb, 'auth_session'), { mode: 'wait', status: 'idle', finger_id: null, message: "로그인 준비 완료" });
             }
         };
 
-        // 앱 시작 (익명 로그인 처리)
         async function initApp() {
             try {
                 await signInAnonymously(auth);
@@ -155,11 +153,10 @@
                 });
             } catch (error) {
                 console.error("Auth Error:", error);
-                alert("인증 오류! 파이어베이스 설정에서 익명 로그인을 켰는지 확인하세요.");
+                alert("인증 오류! 파이어베이스 콘솔에서 익명 로그인을 켜주세요.");
             }
         }
 
-        // 터미널 로그 추가 함수
         function appendLog(message) {
             if(!message) return;
             const logLine = document.createElement('div');
@@ -176,106 +173,87 @@
             setTimeout(() => alertBox.classList.add('hidden'), 4000);
         }
 
-        // 파이어베이스 RTDB 상태 감지 핵심 로직
         function setupRTDBListener() {
+            // 이 경로는 피코와 상태를 주고받는 "리모컨" 역할이므로 계속 덮어써지는 것이 맞습니다.
             const statusRef = ref(rtdb, 'auth_session');
             let lastMessage = "";
 
             onValue(statusRef, (snapshot) => {
                 const data = snapshot.val();
                 if (!data) return;
-                console.log("RTDB 수신 데이터:", data);
 
-                // 로그 출력
                 if (data.message && data.message !== lastMessage) {
                     appendLog(data.message);
                     lastMessage = data.message;
                 }
 
-                // 이미 로그인해서 메모장에 있다면 더 이상 이벤트 처리하지 않음
                 if (currentFingerId !== null) return;
 
-                // 로그인 성공 처리! (즉시 화면 전환)
+                // 로그인 성공! 화면 넘기기
                 if (data.mode === 'wait' && data.status === 'success') {
-                    console.log("로그인 성공! 화면 넘김 처리 시작");
                     showAlert("인증 성공!", "success");
-                    
-                    // 1. 상태 변수 업데이트
                     currentFingerId = data.finger_id;
-                    
-                    // 2. UI 업데이트
                     document.getElementById('btn-nav-login').textContent = "로그아웃";
                     document.getElementById('display-id').textContent = currentFingerId;
                     
-                    // 3. 💥 화면 즉시 전환! (여기서 딜레이를 없앴습니다)
                     showView('dashboard');
-                    
-                    // 4. Firestore에서 메모 불러오기
-                    loadMemos();
+                    loadMemos(); // 메모 불러오기 실행
                 } 
-                // 회원가입 완료 처리 (Firestore 저장)
+                // 💥 지문 회원가입 성공 시 -> Realtime DB의 'users' 폴더에 기록!
                 else if (data.mode === 'wait' && data.status === 'enroll_success') {
                     showAlert(`가입 완료! (ID: ${data.finger_id})`, "success");
                     try {
-                        // 💥 Firestore users 컬렉션에 정보 저장
-                        const userRef = doc(db, 'users', String(data.finger_id));
-                        setDoc(userRef, { finger_id: data.finger_id, joined_at: Date.now() });
-                        console.log("Firestore 회원가입 성공");
+                        // users/지문ID 경로에 유저 정보 저장
+                        set(ref(rtdb, 'users/' + data.finger_id), { 
+                            finger_id: data.finger_id, 
+                            joined_at: Date.now() 
+                        });
+                        console.log("Realtime DB에 유저 정보 저장 성공");
                     } catch (e) {
-                        console.error("Firestore 유저 저장 실패:", e);
+                        console.error("유저 저장 에러:", e);
                     }
                     setTimeout(() => document.getElementById('tab-login').click(), 2000);
                 }
-                // 오류 처리
                 else if (data.status === 'failed') {
                     showAlert("등록되지 않은 지문이거나 인식에 실패했습니다.", "error");
                 }
             });
         }
 
-        // 메모장 열기 및 Firestore에서 불러오기
+        // 💥 Realtime DB에서 메모 불러오기
         function loadMemos() {
-            console.log("메모 불러오기 시도...");
-            try {
-                // 💥 직관적인 루트 경로로 단순화
-                const memosRef = collection(db, 'memos');
+            const memosRef = ref(rtdb, 'memos');
+            
+            memoUnsubscribe = onValue(memosRef, (snapshot) => {
+                let html = '';
+                const memos = [];
                 
-                memoUnsubscribe = onSnapshot(memosRef, (snapshot) => {
-                    let html = '';
-                    const memos = [];
-                    
-                    snapshot.forEach((doc) => {
-                        const memoData = doc.data();
-                        // 내 지문 ID인 것만 골라내기
-                        if (memoData.finger_id === currentFingerId) {
-                            memos.push({ id: doc.id, ...memoData });
-                        }
-                    });
-
-                    memos.sort((a, b) => b.timestamp - a.timestamp);
-
-                    if (memos.length === 0) {
-                        html = `<div class="text-center text-slate-400 py-12 col-span-full border border-dashed border-slate-200 rounded-2xl bg-white">첫 번째 메모를 남겨보세요!</div>`;
-                    } else {
-                        memos.forEach(memo => {
-                            const date = new Date(memo.timestamp).toLocaleString();
-                            html += `<div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition">
-                                <p class="text-slate-800 whitespace-pre-wrap leading-relaxed">${memo.content}</p>
-                                <div class="mt-4 text-xs text-slate-400 border-t border-slate-50 pt-3">${date}</div>
-                            </div>`;
-                        });
+                // .forEach()를 통해 누적된 기록을 하나씩 꺼냅니다
+                snapshot.forEach((childSnapshot) => {
+                    const memoData = childSnapshot.val();
+                    if (memoData.finger_id === currentFingerId) {
+                        memos.push({ id: childSnapshot.key, ...memoData });
                     }
-                    document.getElementById('memo-list').innerHTML = html;
-                }, (error) => {
-                    console.error("메모 실시간 동기화 에러:", error);
-                    alert("Firestore 규칙(Rules)이 열려있지 않아 메모를 불러올 수 없습니다!");
                 });
-            } catch (e) {
-                console.error("Firestore 연결 에러:", e);
-            }
+
+                memos.sort((a, b) => b.timestamp - a.timestamp);
+
+                if (memos.length === 0) {
+                    html = `<div class="text-center text-slate-400 py-12 col-span-full border border-dashed border-slate-200 rounded-2xl bg-white">첫 번째 메모를 남겨보세요!</div>`;
+                } else {
+                    memos.forEach(memo => {
+                        const date = new Date(memo.timestamp).toLocaleString();
+                        html += `<div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition">
+                            <p class="text-slate-800 whitespace-pre-wrap leading-relaxed">${memo.content}</p>
+                            <div class="mt-4 text-xs text-slate-400 border-t border-slate-50 pt-3">${date}</div>
+                        </div>`;
+                    });
+                }
+                document.getElementById('memo-list').innerHTML = html;
+            });
         }
 
-        // 메모 작성 후 Firestore 저장
+        // 💥 Realtime DB에 메모 "누적" 저장하기 (push 사용)
         document.getElementById('btn-save-memo').addEventListener('click', async () => {
             const input = document.getElementById('memo-input');
             const content = input.value.trim();
@@ -286,14 +264,19 @@
             btn.innerHTML = '저장 중...';
             
             try {
-                // 💥 직관적인 루트 경로로 단순화
-                const memosRef = collection(db, 'memos');
-                await addDoc(memosRef, { finger_id: currentFingerId, content: content, timestamp: Date.now() });
+                // push() 함수를 사용하면 기존 데이터를 덮어쓰지 않고 목록에 추가(누적)합니다!
+                const newMemoRef = push(ref(rtdb, 'memos'));
+                await set(newMemoRef, {
+                    finger_id: currentFingerId,
+                    content: content,
+                    timestamp: Date.now()
+                });
+                
                 input.value = '';
-                console.log("메모 저장 완료!");
+                console.log("메모 저장 완료 (RTDB)");
             } catch (error) {
-                console.error("메모 저장 실패:", error);
-                alert("Firestore 저장 규칙(Rules)을 확인하세요!");
+                console.error("메모 저장 에러:", error);
+                alert("저장 오류!");
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = `<i data-lucide="pen-line" class="w-4 h-4"></i> 저장하기`;
@@ -301,7 +284,6 @@
             }
         });
 
-        // 탭 전환 및 버튼 이벤트 연결
         document.getElementById('tab-login').addEventListener('click', () => {
             set(ref(rtdb, 'auth_session'), { mode: 'wait', status: 'idle', finger_id: null, message: "로그인 대기 중" });
         });
@@ -324,7 +306,7 @@
             }
         });
 
-        initApp(); // 앱 실행
+        initApp(); 
     </script>
 </body>
 </html>
