@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>생체인식 스마트 메모장</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.css" rel="stylesheet">
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased">
+
+    <!-- 로그인 전 화면 -->
+    <div id="auth-screen" class="min-h-screen flex flex-col items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center space-y-6">
+            <div class="bg-blue-100 w-24 h-24 mx-auto rounded-full flex items-center justify-center text-blue-600 mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/></svg>
+            </div>
+            
+            <h1 class="text-2xl font-bold text-slate-800">지문으로 로그인하세요</h1>
+            <p id="status-message" class="text-slate-500">지문 센서에 손가락을 올려주세요...</p>
+
+            <div class="pt-6 border-t border-slate-100">
+                <p class="text-sm text-slate-400 mb-3">처음 오셨나요?</p>
+                <button id="btn-enroll" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-medium py-3 px-4 rounded-xl transition">
+                    새 지문 등록하기
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 로그인 후 메인 메모장 화면 (기본 숨김) -->
+    <div id="app-screen" class="hidden min-h-screen bg-slate-50 p-4 md:p-8">
+        <div class="max-w-4xl mx-auto">
+            <div class="flex justify-between items-center mb-8">
+                <div>
+                    <h1 class="text-3xl font-bold text-slate-800">나의 메모장</h1>
+                    <p class="text-slate-500">환영합니다, 사용자 #<span id="display-id">0</span>님</p>
+                </div>
+                <button id="btn-logout" class="bg-red-50 text-red-600 hover:bg-red-100 px-4 py-2 rounded-lg font-medium transition">
+                    로그아웃
+                </button>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8">
+                <textarea id="memo-input" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" placeholder="여기에 새로운 메모를 작성하세요..."></textarea>
+                <div class="flex justify-end mt-4">
+                    <button id="btn-save-memo" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl font-medium transition">
+                        저장하기
+                    </button>
+                </div>
+            </div>
+
+            <div id="memo-list" class="space-y-4">
+                <!-- 메모가 여기에 추가됩니다 -->
+                <div class="text-center text-slate-400 py-8">작성된 메모가 없습니다.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 파이어베이스 SDK 불러오기 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
+        import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // ==========================================
+        // 1. 파이어베이스 설정 (본인의 Config로 변경 필수!)
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "본인의_API_KEY",
+            authDomain: "본인의_PROJECT.firebaseapp.com",
+            databaseURL: "https://본인의_PROJECT.firebaseio.com",
+            projectId: "본인의_PROJECT",
+            storageBucket: "본인의_PROJECT.appspot.com",
+            messagingSenderId: "SENDER_ID",
+            appId: "APP_ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const rtdb = getDatabase(app);
+        const db = getFirestore(app);
+        const appId = "fingerprint-memo-app"; // 고정 앱 ID
+
+        // UI 요소
+        const authScreen = document.getElementById('auth-screen');
+        const appScreen = document.getElementById('app-screen');
+        const statusMessage = document.getElementById('status-message');
+        const btnEnroll = document.getElementById('btn-enroll');
+        const btnLogout = document.getElementById('btn-logout');
+        const btnSaveMemo = document.getElementById('btn-save-memo');
+        const memoInput = document.getElementById('memo-input');
+        const memoList = document.getElementById('memo-list');
+        const displayId = document.getElementById('display-id');
+
+        let currentFingerId = null;
+        let memoUnsubscribe = null;
+
+        // ==========================================
+        // 2. 인증 및 Realtime DB 리스너 (하드웨어 상태 감지)
+        // ==========================================
+        async function init() {
+            // 데이터베이스 권한을 위해 익명 로그인 수행
+            await signInAnonymously(auth);
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    listenToHardwareStatus();
+                }
+            });
+        }
+
+        function listenToHardwareStatus() {
+            const statusRef = ref(rtdb, 'auth_session');
+            onValue(statusRef, (snapshot) => {
+                const data = snapshot.val();
+                if (!data) return;
+
+                // 로그인 중이면 다른 상태 메시지 무시
+                if (currentFingerId !== null) return; 
+
+                if (data.mode === 'enroll') {
+                    statusMessage.textContent = "센서가 파란색으로 깜빡이면 지문을 2번 찍어주세요!";
+                    statusMessage.className = "text-blue-600 font-bold";
+                    btnEnroll.disabled = true;
+                    btnEnroll.textContent = "등록 중...";
+                } else if (data.mode === 'wait') {
+                    btnEnroll.disabled = false;
+                    btnEnroll.textContent = "새 지문 등록하기";
+
+                    if (data.status === 'success') {
+                        statusMessage.textContent = "인증 성공! 접속 중...";
+                        statusMessage.className = "text-green-600 font-bold";
+                        login(data.finger_id);
+                    } else if (data.status === 'enroll_success') {
+                        alert(`지문 등록 성공! (ID: ${data.finger_id})\n이제 해당 지문으로 로그인할 수 있습니다.`);
+                        // 상태를 다시 초기화
+                        set(ref(rtdb, 'auth_session'), { mode: 'wait', status: 'idle', finger_id: null });
+                        statusMessage.textContent = "지문 센서에 손가락을 올려주세요...";
+                        statusMessage.className = "text-slate-500";
+                    } else if (data.status === 'failed') {
+                        statusMessage.textContent = "등록되지 않은 지문입니다. 다시 시도하세요.";
+                        statusMessage.className = "text-red-500 font-bold";
+                    } else {
+                        statusMessage.textContent = "지문 센서에 손가락을 올려주세요...";
+                        statusMessage.className = "text-slate-500";
+                    }
+                }
+            });
+        }
+
+        // ==========================================
+        // 3. 앱 로직 (메모장)
+        // ==========================================
+        function login(fingerId) {
+            currentFingerId = fingerId;
+            displayId.textContent = fingerId;
+            authScreen.classList.add('hidden');
+            appScreen.classList.remove('hidden');
+            loadMemos();
+        }
+
+        function logout() {
+            currentFingerId = null;
+            if (memoUnsubscribe) memoUnsubscribe();
+            authScreen.classList.remove('hidden');
+            appScreen.classList.add('hidden');
+            statusMessage.textContent = "지문 센서에 손가락을 올려주세요...";
+            statusMessage.className = "text-slate-500";
+            // 피코에 다시 대기 명령 전송
+            set(ref(rtdb, 'auth_session'), { mode: 'wait', status: 'idle', finger_id: null });
+        }
+
+        function loadMemos() {
+            // Firestore에서 공용 메모 컬렉션을 가져오되, 자신의 fingerId인 것만 JS에서 필터링
+            const memosRef = collection(db, 'artifacts', appId, 'public', 'data', 'memos');
+            
+            memoUnsubscribe = onSnapshot(memosRef, (snapshot) => {
+                let html = '';
+                const memos = [];
+                
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (data.finger_id === currentFingerId) {
+                        memos.push({ id: doc.id, ...data });
+                    }
+                });
+
+                // 최신순으로 정렬
+                memos.sort((a, b) => b.timestamp - a.timestamp);
+
+                if (memos.length === 0) {
+                    html = '<div class="text-center text-slate-400 py-8">작성된 메모가 없습니다.</div>';
+                } else {
+                    memos.forEach(memo => {
+                        const date = new Date(memo.timestamp).toLocaleString();
+                        html += `
+                        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+                            <p class="text-slate-800 whitespace-pre-wrap">${memo.content}</p>
+                            <p class="text-xs text-slate-400 mt-3">${date}</p>
+                        </div>`;
+                    });
+                }
+                memoList.innerHTML = html;
+            }, (error) => {
+                console.error("메모 불러오기 에러:", error);
+            });
+        }
+
+        async function saveMemo() {
+            const content = memoInput.value.trim();
+            if (!content || currentFingerId === null) return;
+
+            btnSaveMemo.disabled = true;
+            btnSaveMemo.textContent = "저장 중...";
+
+            try {
+                const memosRef = collection(db, 'artifacts', appId, 'public', 'data', 'memos');
+                await addDoc(memosRef, {
+                    finger_id: currentFingerId,
+                    content: content,
+                    timestamp: Date.now()
+                });
+                memoInput.value = '';
+            } catch (error) {
+                console.error("저장 실패:", error);
+                alert("메모 저장에 실패했습니다.");
+            } finally {
+                btnSaveMemo.disabled = false;
+                btnSaveMemo.textContent = "저장하기";
+            }
+        }
+
+        // ==========================================
+        // 4. 이벤트 리스너
+        // ==========================================
+        btnEnroll.addEventListener('click', () => {
+            // 피코에게 "등록 모드로 바꿔라"고 지시
+            set(ref(rtdb, 'auth_session'), { mode: 'enroll', status: 'idle', finger_id: null });
+        });
+
+        btnLogout.addEventListener('click', logout);
+        btnSaveMemo.addEventListener('click', saveMemo);
+
+        // 초기화 실행
+        init();
+    </script>
+</body>
+</html>
