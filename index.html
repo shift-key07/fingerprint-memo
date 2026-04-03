@@ -32,7 +32,6 @@
                 <span class="text-xl font-bold text-slate-800 tracking-tight">Jimon</span>
             </div>
             <div id="nav-actions">
-                <!-- 로그인 상태에 따라 버튼이 바뀜 -->
                 <button id="btn-nav-login" class="text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-full transition">시작하기</button>
             </div>
         </div>
@@ -90,8 +89,15 @@
             <h2 id="auth-title" class="text-2xl font-bold text-slate-800 mb-2">지문을 인식해주세요</h2>
             <p id="auth-subtitle" class="text-slate-500 text-sm h-10">기기의 센서에 등록된 손가락을 올려주세요.</p>
 
-            <!-- 상태 알림 박스 (오류나 성공 시 표시) -->
+            <!-- 상태 알림 박스 -->
             <div id="auth-alert" class="hidden mt-4 p-3 rounded-xl text-sm font-medium"></div>
+
+            <!-- 💥 초기화 버튼 추가 💥 -->
+            <div class="mt-8 pt-6 border-t border-slate-100">
+                <button id="btn-clear-db" class="text-xs text-red-400 hover:text-red-600 font-medium transition flex items-center justify-center w-full gap-1">
+                    <i data-lucide="triangle-alert" class="w-4 h-4"></i> 센서 초기화 (모든 지문 삭제)
+                </button>
+            </div>
         </div>
     </main>
 
@@ -126,7 +132,6 @@
             </div>
             
             <div id="memo-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <!-- 스켈레톤 로딩 (자바스크립트가 지울 예정) -->
                 <div class="text-center text-slate-400 py-12 col-span-full border-2 border-dashed border-slate-200 rounded-2xl">
                     메모를 불러오는 중입니다...
                 </div>
@@ -137,14 +142,14 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>lucide.createIcons();</script>
 
-    <!-- 파이어베이스 SDK (v11.6.1) -->
+    <!-- 파이어베이스 SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
-        import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // doc, setDoc을 추가로 불러와 Firestore에 유저 정보(회원가입)를 저장할 수 있게 함
+        import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // 1. 유저가 제공한 정확한 Firebase 설정
         const firebaseConfig = {
             apiKey: "AIzaSyAm29muJaEax7QGT3NT91dHBrvFPG6VYOg",
             authDomain: "jimon-655db.firebaseapp.com",
@@ -160,24 +165,18 @@
         const auth = getAuth(app);
         const rtdb = getDatabase(app);
         const db = getFirestore(app);
-        
-        // 데이터 저장 경로 식별자
         const firestoreAppId = "jimon-655db"; 
 
-        // 전역 상태
         let currentFingerId = null;
         let memoUnsubscribe = null;
-        let currentAuthMode = 'wait'; // 'wait' (로그인) 또는 'enroll' (가입)
+        let currentAuthMode = 'wait'; 
 
-        // UI 요소
         const views = {
             home: document.getElementById('view-home'),
             auth: document.getElementById('view-auth'),
             dashboard: document.getElementById('view-dashboard')
         };
         const btnNavLogin = document.getElementById('btn-nav-login');
-        
-        // Auth UI 요소
         const tabLogin = document.getElementById('tab-login');
         const tabSignup = document.getElementById('tab-signup');
         const authTitle = document.getElementById('auth-title');
@@ -185,61 +184,41 @@
         const authIcon = document.getElementById('auth-icon');
         const authAlert = document.getElementById('auth-alert');
         const authRing = document.getElementById('auth-ring');
+        const btnClearDb = document.getElementById('btn-clear-db');
 
-        // Dashboard UI 요소
         const displayId = document.getElementById('display-id');
         const memoInput = document.getElementById('memo-input');
         const btnSaveMemo = document.getElementById('btn-save-memo');
         const memoList = document.getElementById('memo-list');
         const memoCount = document.getElementById('memo-count');
 
-        // ==========================================
-        // 뷰(View) 전환 로직
-        // ==========================================
         window.showView = function(viewName) {
             Object.values(views).forEach(v => v.classList.add('hidden'));
             views[viewName].classList.remove('hidden');
 
             if (viewName === 'auth') {
-                // 인증 화면으로 진입 시 무조건 RTDB를 대기(로그인) 상태로 초기화
                 setModeWait();
             }
         };
 
         btnNavLogin.addEventListener('click', () => {
-            if (currentFingerId !== null) {
-                // 로그아웃 로직
-                logout();
-            } else {
-                showView('auth');
-            }
+            if (currentFingerId !== null) logout();
+            else showView('auth');
         });
 
-        // ==========================================
-        // Firebase 초기화 및 RTDB 리스너
-        // ==========================================
         async function initApp() {
-            // Firestore 사용을 위한 익명 로그인
             await signInAnonymously(auth);
-            
             onAuthStateChanged(auth, (user) => {
-                if (user) {
-                    setupRTDBListener();
-                }
+                if (user) setupRTDBListener();
             });
         }
 
-        // 알림 메시지 띄우기 도우미
         function showAlert(msg, type) {
             authAlert.textContent = msg;
-            authAlert.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
-            if (type === 'error') authAlert.classList.add('bg-red-100', 'text-red-700');
-            if (type === 'success') authAlert.classList.add('bg-green-100', 'text-green-700');
-            
+            authAlert.className = `mt-4 p-3 rounded-xl text-sm font-medium ${type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`;
             setTimeout(() => { authAlert.classList.add('hidden'); }, 4000);
         }
 
-        // UI 탭 상태 변경
         function updateAuthUITabs(mode) {
             currentAuthMode = mode;
             if (mode === 'wait') {
@@ -247,17 +226,15 @@
                 tabSignup.className = "flex-1 py-2 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-800 transition";
                 authTitle.textContent = "지문으로 로그인";
                 authSubtitle.textContent = "기기의 센서에 손가락을 올려주세요.";
-                authIcon.classList.remove('text-purple-500');
-                authIcon.classList.add('text-blue-500');
-                authRing.classList.replace('border-purple-100', 'border-blue-100');
-            } else {
+                authIcon.className = "w-16 h-16 z-10 transition-colors duration-300 text-blue-500";
+                authRing.className = "absolute inset-0 rounded-full pulse-ring border-4 border-blue-100";
+            } else if (mode === 'enroll') {
                 tabSignup.className = "flex-1 py-2 rounded-lg text-sm font-bold bg-white text-purple-600 shadow-sm transition";
                 tabLogin.className = "flex-1 py-2 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-800 transition";
                 authTitle.textContent = "새 지문 등록";
                 authSubtitle.textContent = "센서에 동일한 손가락을 2번 스캔해주세요.";
-                authIcon.classList.remove('text-blue-500');
-                authIcon.classList.add('text-purple-500');
-                authRing.classList.replace('border-blue-100', 'border-purple-100');
+                authIcon.className = "w-16 h-16 z-10 transition-colors duration-300 text-purple-500";
+                authRing.className = "absolute inset-0 rounded-full pulse-ring border-4 border-purple-100";
             }
         }
 
@@ -273,56 +250,67 @@
 
         tabLogin.addEventListener('click', setModeWait);
         tabSignup.addEventListener('click', setModeEnroll);
+        
+        // 💥 초기화(DB Clear) 기능
+        btnClearDb.addEventListener('click', () => {
+            const isConfirm = confirm("⚠️ 경고\n기기에 저장된 모든 지문 정보가 삭제됩니다.\n계속하시겠습니까?");
+            if (isConfirm) {
+                set(ref(rtdb, 'auth_session'), { mode: 'clear_db', status: 'idle', finger_id: null });
+                authTitle.textContent = "초기화 진행 중...";
+                authSubtitle.textContent = "기기에서 데이터를 지우고 있습니다.";
+                authIcon.className = "w-16 h-16 z-10 transition-colors duration-300 text-red-500";
+                authRing.className = "absolute inset-0 rounded-full pulse-ring border-4 border-red-100";
+            }
+        });
 
-        // 하드웨어 상태 실시간 감지 (핵심 로직)
         function setupRTDBListener() {
             const statusRef = ref(rtdb, 'auth_session');
             onValue(statusRef, (snapshot) => {
                 const data = snapshot.val();
                 if (!data) return;
-
-                // 이미 로그인 된 상태라면 무시
                 if (currentFingerId !== null) return;
 
-                // 웹에서 다른 탭을 눌렀을 수 있으니 UI 모드 동기화
                 if (currentAuthMode !== data.mode && data.status === 'idle') {
-                    updateAuthUITabs(data.mode);
+                    if(data.mode === 'wait' || data.mode === 'enroll') updateAuthUITabs(data.mode);
                 }
 
-                // 기기 응답 처리
                 if (data.mode === 'wait') {
                     if (data.status === 'success') {
-                        // 로그인 성공!
                         authIcon.classList.replace('text-blue-500', 'text-green-500');
                         authRing.classList.replace('border-blue-100', 'border-green-100');
                         authTitle.textContent = "인증 성공!";
                         authSubtitle.textContent = "메모장으로 이동합니다...";
                         setTimeout(() => loginSuccess(data.finger_id), 1000);
-                        
                     } else if (data.status === 'failed') {
                         showAlert("등록되지 않은 지문입니다.", "error");
                         authIcon.classList.replace('text-blue-500', 'text-red-500');
                         setTimeout(() => { authIcon.classList.replace('text-red-500', 'text-blue-500'); }, 2000);
-                        
                     } else if (data.status === 'enroll_success') {
-                        // 가입 직후 성공 시그널 (wait 모드 내에서 옴)
-                        showAlert(`가입 완료! ID: ${data.finger_id} 이제 로그인해주세요.`, "success");
-                        // 3초 뒤에 IDLE로 덮어씌움
+                        showAlert(`가입 완료! (ID: ${data.finger_id}) 이제 로그인해주세요.`, "success");
+                        
+                        // 💥 [추가됨] Firestore에 '유저 정보' 명시적으로 생성 (회원가입 기록)
+                        const userRef = doc(db, 'artifacts', firestoreAppId, 'public', 'data', 'users', data.finger_id.toString());
+                        setDoc(userRef, {
+                            finger_id: data.finger_id,
+                            joined_at: Date.now()
+                        }).catch(err => console.error("유저 정보 저장 실패:", err));
+
+                        setTimeout(() => { setModeWait(); }, 3000);
+                    } else if (data.status === 'clear_success') {
+                        showAlert("기기의 모든 지문이 성공적으로 삭제되었습니다.", "success");
+                        setTimeout(() => { setModeWait(); }, 3000);
+                    } else if (data.status === 'clear_failed') {
+                        showAlert("기기 초기화에 실패했습니다.", "error");
                         setTimeout(() => { setModeWait(); }, 3000);
                     }
                 }
             });
         }
 
-        // ==========================================
-        // 대시보드 (메모) 로직
-        // ==========================================
         function loginSuccess(fingerId) {
             currentFingerId = fingerId;
             btnNavLogin.textContent = "로그아웃";
-            btnNavLogin.classList.replace('bg-slate-100', 'bg-red-50');
-            btnNavLogin.classList.replace('text-slate-700', 'text-red-600');
-            
+            btnNavLogin.className = "text-sm font-medium bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-full transition";
             displayId.textContent = fingerId;
             showView('dashboard');
             loadMemos();
@@ -331,26 +319,19 @@
         function logout() {
             currentFingerId = null;
             if (memoUnsubscribe) memoUnsubscribe();
-            
             btnNavLogin.textContent = "시작하기";
-            btnNavLogin.classList.replace('bg-red-50', 'bg-slate-100');
-            btnNavLogin.classList.replace('text-red-600', 'text-slate-700');
-            
+            btnNavLogin.className = "text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-full transition";
             showView('home');
-            setModeWait(); // 다시 인증 대기로 리셋
+            setModeWait();
         }
 
         function loadMemos() {
-            // Firestore 규칙에 따라 public/data 구조 사용 (인증 없이도 룰 제약 회피를 위함)
             const memosRef = collection(db, 'artifacts', firestoreAppId, 'public', 'data', 'memos');
-            
             memoUnsubscribe = onSnapshot(memosRef, (snapshot) => {
                 let html = '';
                 const memos = [];
-                
                 snapshot.forEach((doc) => {
                     const data = doc.data();
-                    // 내 지문 ID로 작성된 메모만 JS에서 필터링
                     if (data.finger_id === currentFingerId) {
                         memos.push({ id: doc.id, ...data });
                     }
@@ -377,7 +358,7 @@
                     });
                 }
                 memoList.innerHTML = html;
-                lucide.createIcons(); // 동적으로 추가된 아이콘 렌더링
+                lucide.createIcons();
             });
         }
 
@@ -408,7 +389,6 @@
             }
         });
 
-        // 앱 시작
         initApp();
     </script>
 </body>
