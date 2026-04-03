@@ -70,6 +70,11 @@
 
             <div id="auth-alert" class="hidden p-3 rounded-xl text-sm font-medium"></div>
 
+            <!-- 💥 테스트용 강제 로그인 버튼 추가 -->
+            <button id="btn-test-login" class="mt-4 bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-4 rounded-xl w-full transition shadow-md flex justify-center items-center gap-2">
+                <i data-lucide="log-in" class="w-5 h-5"></i> 임시 로그인 (버튼으로 바로 접속)
+            </button>
+
             <div class="mt-4 pt-6 border-t border-slate-100">
                 <button id="btn-clear-db" class="text-xs text-red-400 hover:text-red-600 font-medium transition flex items-center justify-center w-full gap-1">
                     <i data-lucide="triangle-alert" class="w-4 h-4"></i> 기기 초기화 (모든 지문 삭제)
@@ -290,6 +295,13 @@
         document.getElementById('tab-signup').addEventListener('click', () => {
             set(ref(rtdb, 'auth_session'), { mode: 'enroll', status: 'idle', finger_id: null, message: "회원가입(등록) 모드 진입" });
         });
+
+        // 💥 테스트용 로그인 버튼 이벤트 추가 (누르면 바로 ID 1번으로 로그인)
+        document.getElementById('btn-test-login').addEventListener('click', () => {
+            showAlert("테스트 계정으로 접속합니다.", "success");
+            setTimeout(() => loginSuccess(1), 500); 
+        });
+
         document.getElementById('btn-clear-db').addEventListener('click', () => {
             if (confirm("모든 지문이 삭제됩니다. 계속하시겠습니까?")) {
                 set(ref(rtdb, 'auth_session'), { mode: 'clear_db', status: 'idle', finger_id: null, message: "기기 초기화 명령 전송" });
