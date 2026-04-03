@@ -7,22 +7,21 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.css" rel="stylesheet">
     <style>
-        /* 부드러운 화면 전환을 위한 애니메이션 */
         .fade-in { animation: fadeIn 0.4s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* 지문 센서 애니메이션 */
         .pulse-ring { animation: pulse 2s infinite; }
         @keyframes pulse {
             0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
             70% { transform: scale(1); box-shadow: 0 0 0 15px rgba(59, 130, 246, 0); }
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
         }
+        /* 터미널 스타일 스크롤바 */
+        .terminal-scroll::-webkit-scrollbar { width: 6px; }
+        .terminal-scroll::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col">
 
-    <!-- 네비게이션 바 -->
     <nav class="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-10">
         <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
             <div class="flex items-center space-x-2 cursor-pointer" onclick="showView('home')">
@@ -37,7 +36,7 @@
         </div>
     </nav>
 
-    <!-- 1. 메인 홍보 화면 (Home) -->
+    <!-- 1. 메인 홈 -->
     <main id="view-home" class="flex-grow flex flex-col items-center justify-center p-6 fade-in">
         <div class="max-w-3xl text-center space-y-8">
             <h1 class="text-5xl md:text-6xl font-extrabold text-slate-900 tracking-tight leading-tight">
@@ -51,31 +50,12 @@
                     무료로 시작하기
                 </button>
             </div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-16">
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                    <div class="bg-blue-50 w-12 h-12 rounded-xl flex items-center justify-center text-blue-600 mb-4 mx-auto"><i data-lucide="fingerprint"></i></div>
-                    <h3 class="font-bold text-lg mb-2">강력한 생체보안</h3>
-                    <p class="text-slate-500 text-sm">AS608 모듈을 통해 하드웨어 단에서 지문을 스캔하고 인증합니다.</p>
-                </div>
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                    <div class="bg-blue-50 w-12 h-12 rounded-xl flex items-center justify-center text-blue-600 mb-4 mx-auto"><i data-lucide="zap"></i></div>
-                    <h3 class="font-bold text-lg mb-2">실시간 연동</h3>
-                    <p class="text-slate-500 text-sm">기기에 손가락을 대는 즉시 웹 화면이 마법처럼 반응하여 로그인됩니다.</p>
-                </div>
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                    <div class="bg-blue-50 w-12 h-12 rounded-xl flex items-center justify-center text-blue-600 mb-4 mx-auto"><i data-lucide="cloud"></i></div>
-                    <h3 class="font-bold text-lg mb-2">클라우드 저장소</h3>
-                    <p class="text-slate-500 text-sm">작성한 메모는 안전한 클라우드(Firestore)에 암호화되어 영구 저장됩니다.</p>
-                </div>
-            </div>
         </div>
     </main>
 
-    <!-- 2. 로그인 & 회원가입 화면 (Auth) -->
+    <!-- 2. 로그인 & 회원가입 화면 -->
     <main id="view-auth" class="hidden flex-grow flex items-center justify-center p-6 fade-in">
         <div class="bg-white p-8 md:p-10 rounded-3xl shadow-xl max-w-md w-full text-center relative overflow-hidden">
-            <!-- 탭 전환 버튼 -->
             <div class="flex justify-center bg-slate-100 p-1 rounded-xl mb-8">
                 <button id="tab-login" class="flex-1 py-2 rounded-lg text-sm font-bold bg-white text-blue-600 shadow-sm transition">로그인</button>
                 <button id="tab-signup" class="flex-1 py-2 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-800 transition">지문 등록(가입)</button>
@@ -87,13 +67,19 @@
             </div>
 
             <h2 id="auth-title" class="text-2xl font-bold text-slate-800 mb-2">지문을 인식해주세요</h2>
-            <p id="auth-subtitle" class="text-slate-500 text-sm h-10">기기의 센서에 등록된 손가락을 올려주세요.</p>
+            <p id="auth-subtitle" class="text-slate-500 text-sm h-6 mb-4">기기의 센서에 등록된 손가락을 올려주세요.</p>
 
-            <!-- 상태 알림 박스 -->
-            <div id="auth-alert" class="hidden mt-4 p-3 rounded-xl text-sm font-medium"></div>
+            <!-- 💥 웹 터미널 (피코 로그 출력) 💥 -->
+            <div class="bg-slate-900 rounded-xl p-4 text-left shadow-inner h-24 overflow-y-auto terminal-scroll mb-4">
+                <p class="text-xs font-bold text-slate-400 mb-1 flex items-center gap-1"><i data-lucide="terminal" class="w-3 h-3"></i> Pico 2 W 터미널 연결됨</p>
+                <div id="device-terminal" class="text-green-400 font-mono text-sm space-y-1">
+                    <div>> 시스템 대기 중...</div>
+                </div>
+            </div>
 
-            <!-- 💥 초기화 버튼 추가 💥 -->
-            <div class="mt-8 pt-6 border-t border-slate-100">
+            <div id="auth-alert" class="hidden p-3 rounded-xl text-sm font-medium"></div>
+
+            <div class="mt-4 pt-6 border-t border-slate-100">
                 <button id="btn-clear-db" class="text-xs text-red-400 hover:text-red-600 font-medium transition flex items-center justify-center w-full gap-1">
                     <i data-lucide="triangle-alert" class="w-4 h-4"></i> 센서 초기화 (모든 지문 삭제)
                 </button>
@@ -101,7 +87,7 @@
         </div>
     </main>
 
-    <!-- 3. 메모 및 기능 화면 (Dashboard) -->
+    <!-- 3. 메모 및 기능 화면 -->
     <main id="view-dashboard" class="hidden flex-grow bg-slate-50 p-4 md:p-8 fade-in">
         <div class="max-w-4xl mx-auto">
             <header class="mb-8 flex justify-between items-end">
@@ -114,7 +100,6 @@
                 </div>
             </header>
 
-            <!-- 메모 작성부 -->
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8 transition focus-within:shadow-md focus-within:border-blue-300">
                 <textarea id="memo-input" rows="3" class="w-full bg-transparent border-none focus:ring-0 p-0 text-lg resize-none placeholder-slate-300" placeholder="새로운 아이디어나 메모를 남겨보세요..."></textarea>
                 <div class="flex justify-between items-center mt-4 pt-4 border-t border-slate-100">
@@ -125,17 +110,12 @@
                 </div>
             </div>
 
-            <!-- 메모 리스트 -->
             <div class="flex items-center justify-between mb-4">
                 <h3 class="font-bold text-slate-700">최근 기록</h3>
                 <span id="memo-count" class="text-sm text-slate-400">총 0개</span>
             </div>
             
-            <div id="memo-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="text-center text-slate-400 py-12 col-span-full border-2 border-dashed border-slate-200 rounded-2xl">
-                    메모를 불러오는 중입니다...
-                </div>
-            </div>
+            <div id="memo-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
         </div>
     </main>
 
@@ -147,7 +127,6 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
-        // doc, setDoc을 추가로 불러와 Firestore에 유저 정보(회원가입)를 저장할 수 있게 함
         import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -171,11 +150,7 @@
         let memoUnsubscribe = null;
         let currentAuthMode = 'wait'; 
 
-        const views = {
-            home: document.getElementById('view-home'),
-            auth: document.getElementById('view-auth'),
-            dashboard: document.getElementById('view-dashboard')
-        };
+        const views = { home: document.getElementById('view-home'), auth: document.getElementById('view-auth'), dashboard: document.getElementById('view-dashboard') };
         const btnNavLogin = document.getElementById('btn-nav-login');
         const tabLogin = document.getElementById('tab-login');
         const tabSignup = document.getElementById('tab-signup');
@@ -185,6 +160,7 @@
         const authAlert = document.getElementById('auth-alert');
         const authRing = document.getElementById('auth-ring');
         const btnClearDb = document.getElementById('btn-clear-db');
+        const deviceTerminal = document.getElementById('device-terminal');
 
         const displayId = document.getElementById('display-id');
         const memoInput = document.getElementById('memo-input');
@@ -195,10 +171,7 @@
         window.showView = function(viewName) {
             Object.values(views).forEach(v => v.classList.add('hidden'));
             views[viewName].classList.remove('hidden');
-
-            if (viewName === 'auth') {
-                setModeWait();
-            }
+            if (viewName === 'auth') setModeWait();
         };
 
         btnNavLogin.addEventListener('click', () => {
@@ -206,11 +179,26 @@
             else showView('auth');
         });
 
+        // 💥 파이어베이스 권한 디버깅을 위한 에러 캐치 추가
         async function initApp() {
-            await signInAnonymously(auth);
-            onAuthStateChanged(auth, (user) => {
-                if (user) setupRTDBListener();
-            });
+            try {
+                await signInAnonymously(auth);
+                onAuthStateChanged(auth, (user) => {
+                    if (user) setupRTDBListener();
+                });
+            } catch (error) {
+                console.error("Firebase Auth Error:", error);
+                alert("파이어베이스 접속 실패!\n1. 파이어베이스 콘솔 -> Authentication -> Sign-in method에서 '익명' 로그인을 활성화해주세요.\n2. 에러코드: " + error.message);
+            }
+        }
+
+        function appendLog(message) {
+            if(!message) return;
+            const logLine = document.createElement('div');
+            logLine.innerText = '> ' + message;
+            deviceTerminal.appendChild(logLine);
+            // 자동 스크롤
+            deviceTerminal.parentElement.scrollTop = deviceTerminal.parentElement.scrollHeight;
         }
 
         function showAlert(msg, type) {
@@ -225,39 +213,34 @@
                 tabLogin.className = "flex-1 py-2 rounded-lg text-sm font-bold bg-white text-blue-600 shadow-sm transition";
                 tabSignup.className = "flex-1 py-2 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-800 transition";
                 authTitle.textContent = "지문으로 로그인";
-                authSubtitle.textContent = "기기의 센서에 손가락을 올려주세요.";
                 authIcon.className = "w-16 h-16 z-10 transition-colors duration-300 text-blue-500";
                 authRing.className = "absolute inset-0 rounded-full pulse-ring border-4 border-blue-100";
             } else if (mode === 'enroll') {
                 tabSignup.className = "flex-1 py-2 rounded-lg text-sm font-bold bg-white text-purple-600 shadow-sm transition";
                 tabLogin.className = "flex-1 py-2 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-800 transition";
                 authTitle.textContent = "새 지문 등록";
-                authSubtitle.textContent = "센서에 동일한 손가락을 2번 스캔해주세요.";
                 authIcon.className = "w-16 h-16 z-10 transition-colors duration-300 text-purple-500";
                 authRing.className = "absolute inset-0 rounded-full pulse-ring border-4 border-purple-100";
             }
         }
 
         function setModeWait() {
-            set(ref(rtdb, 'auth_session'), { mode: 'wait', status: 'idle', finger_id: null });
+            set(ref(rtdb, 'auth_session'), { mode: 'wait', status: 'idle', finger_id: null, message: "로그인 대기 모드로 전환됨" });
             updateAuthUITabs('wait');
         }
 
         function setModeEnroll() {
-            set(ref(rtdb, 'auth_session'), { mode: 'enroll', status: 'idle', finger_id: null });
+            set(ref(rtdb, 'auth_session'), { mode: 'enroll', status: 'idle', finger_id: null, message: "회원가입(등록) 모드로 전환됨" });
             updateAuthUITabs('enroll');
         }
 
         tabLogin.addEventListener('click', setModeWait);
         tabSignup.addEventListener('click', setModeEnroll);
         
-        // 💥 초기화(DB Clear) 기능
         btnClearDb.addEventListener('click', () => {
-            const isConfirm = confirm("⚠️ 경고\n기기에 저장된 모든 지문 정보가 삭제됩니다.\n계속하시겠습니까?");
-            if (isConfirm) {
-                set(ref(rtdb, 'auth_session'), { mode: 'clear_db', status: 'idle', finger_id: null });
+            if (confirm("⚠️ 경고\n모든 지문이 삭제됩니다.\n계속하시겠습니까?")) {
+                set(ref(rtdb, 'auth_session'), { mode: 'clear_db', status: 'idle', finger_id: null, message: "기기 초기화 명령 전송 완료" });
                 authTitle.textContent = "초기화 진행 중...";
-                authSubtitle.textContent = "기기에서 데이터를 지우고 있습니다.";
                 authIcon.className = "w-16 h-16 z-10 transition-colors duration-300 text-red-500";
                 authRing.className = "absolute inset-0 rounded-full pulse-ring border-4 border-red-100";
             }
@@ -265,9 +248,18 @@
 
         function setupRTDBListener() {
             const statusRef = ref(rtdb, 'auth_session');
+            let lastMessage = "";
+
             onValue(statusRef, (snapshot) => {
                 const data = snapshot.val();
                 if (!data) return;
+                
+                // 💥 피코에서 보낸 터미널 메시지를 캐치해서 화면에 출력!
+                if (data.message && data.message !== lastMessage) {
+                    appendLog(data.message);
+                    lastMessage = data.message;
+                }
+
                 if (currentFingerId !== null) return;
 
                 if (currentAuthMode !== data.mode && data.status === 'idle') {
@@ -279,7 +271,6 @@
                         authIcon.classList.replace('text-blue-500', 'text-green-500');
                         authRing.classList.replace('border-blue-100', 'border-green-100');
                         authTitle.textContent = "인증 성공!";
-                        authSubtitle.textContent = "메모장으로 이동합니다...";
                         setTimeout(() => loginSuccess(data.finger_id), 1000);
                     } else if (data.status === 'failed') {
                         showAlert("등록되지 않은 지문입니다.", "error");
@@ -287,20 +278,11 @@
                         setTimeout(() => { authIcon.classList.replace('text-red-500', 'text-blue-500'); }, 2000);
                     } else if (data.status === 'enroll_success') {
                         showAlert(`가입 완료! (ID: ${data.finger_id}) 이제 로그인해주세요.`, "success");
-                        
-                        // 💥 [추가됨] Firestore에 '유저 정보' 명시적으로 생성 (회원가입 기록)
                         const userRef = doc(db, 'artifacts', firestoreAppId, 'public', 'data', 'users', data.finger_id.toString());
-                        setDoc(userRef, {
-                            finger_id: data.finger_id,
-                            joined_at: Date.now()
-                        }).catch(err => console.error("유저 정보 저장 실패:", err));
-
+                        setDoc(userRef, { finger_id: data.finger_id, joined_at: Date.now() }).catch(err => console.error("Firestore 저장 실패 (규칙 확인 필요):", err));
                         setTimeout(() => { setModeWait(); }, 3000);
                     } else if (data.status === 'clear_success') {
-                        showAlert("기기의 모든 지문이 성공적으로 삭제되었습니다.", "success");
-                        setTimeout(() => { setModeWait(); }, 3000);
-                    } else if (data.status === 'clear_failed') {
-                        showAlert("기기 초기화에 실패했습니다.", "error");
+                        showAlert("모든 지문이 성공적으로 삭제되었습니다.", "success");
                         setTimeout(() => { setModeWait(); }, 3000);
                     }
                 }
@@ -332,56 +314,40 @@
                 const memos = [];
                 snapshot.forEach((doc) => {
                     const data = doc.data();
-                    if (data.finger_id === currentFingerId) {
-                        memos.push({ id: doc.id, ...data });
-                    }
+                    if (data.finger_id === currentFingerId) memos.push({ id: doc.id, ...data });
                 });
 
                 memos.sort((a, b) => b.timestamp - a.timestamp);
                 memoCount.textContent = `총 ${memos.length}개`;
 
                 if (memos.length === 0) {
-                    html = `<div class="text-center text-slate-400 py-12 col-span-full border border-dashed border-slate-200 rounded-2xl bg-white">
-                                <i data-lucide="inbox" class="w-10 h-10 mx-auto mb-3 text-slate-300"></i>
-                                첫 번째 메모를 작성해보세요.
-                            </div>`;
+                    html = `<div class="text-center text-slate-400 py-12 col-span-full border border-dashed border-slate-200 rounded-2xl bg-white"><i data-lucide="inbox" class="w-10 h-10 mx-auto mb-3 text-slate-300"></i>첫 번째 메모를 작성해보세요.</div>`;
                 } else {
                     memos.forEach(memo => {
-                        const date = new Date(memo.timestamp).toLocaleString();
-                        html += `
-                        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition">
-                            <p class="text-slate-800 whitespace-pre-wrap leading-relaxed">${memo.content}</p>
-                            <div class="mt-4 flex items-center justify-between text-xs text-slate-400 border-t border-slate-50 pt-3">
-                                <span>${date}</span>
-                            </div>
-                        </div>`;
+                        html += `<div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition"><p class="text-slate-800 whitespace-pre-wrap leading-relaxed">${memo.content}</p><div class="mt-4 text-xs text-slate-400 border-t border-slate-50 pt-3">${new Date(memo.timestamp).toLocaleString()}</div></div>`;
                     });
                 }
                 memoList.innerHTML = html;
                 lucide.createIcons();
+            }, (error) => {
+                console.error("Firestore 읽기 에러 (규칙 확인 필요):", error);
             });
         }
 
         btnSaveMemo.addEventListener('click', async () => {
             const content = memoInput.value.trim();
             if (!content || currentFingerId === null) return;
-
             const originalText = btnSaveMemo.innerHTML;
             btnSaveMemo.disabled = true;
             btnSaveMemo.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 저장 중...`;
-            lucide.createIcons();
-
+            
             try {
                 const memosRef = collection(db, 'artifacts', firestoreAppId, 'public', 'data', 'memos');
-                await addDoc(memosRef, {
-                    finger_id: currentFingerId,
-                    content: content,
-                    timestamp: Date.now()
-                });
+                await addDoc(memosRef, { finger_id: currentFingerId, content: content, timestamp: Date.now() });
                 memoInput.value = '';
             } catch (error) {
-                console.error("메모 저장 실패:", error);
-                alert("저장 오류가 발생했습니다.");
+                console.error("메모 저장 실패 (규칙 확인 필요):", error);
+                alert("Firestore 저장 규칙(Rules)이 열려있는지 확인하세요!");
             } finally {
                 btnSaveMemo.disabled = false;
                 btnSaveMemo.innerHTML = originalText;
